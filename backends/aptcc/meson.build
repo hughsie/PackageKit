@@ -72,7 +72,7 @@ shared_module(
 
 install_data(
   '20packagekit',
-  install_dir: join_paths(get_option('sysconfdir'), 'apt', 'apt.conf.d'),
+  install_dir: join_paths(sysconfdir, 'apt', 'apt.conf.d'),
 )
 
 install_data(
