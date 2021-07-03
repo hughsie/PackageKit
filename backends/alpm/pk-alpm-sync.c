@@ -30,6 +30,7 @@
 #include "pk-alpm-error.h"
 #include "pk-alpm-transaction.h"
 #include "pk-alpm-update.h"
+#include "pk-alpm-packages.h"
 
 static gboolean
 pk_alpm_transaction_sync_targets (PkBackendJob *job, const gchar **packages, gboolean update, GError **error)
@@ -70,8 +71,10 @@ pk_alpm_transaction_sync_targets (PkBackendJob *job, const gchar **packages, gbo
 
 			ignoregroups = alpm_option_get_ignoregroups (priv->alpm);
 			for (group_iter = alpm_pkg_get_groups (pkg); group_iter != NULL; group_iter = group_iter->next) {
-				if (alpm_list_find_str (ignoregroups, i->data) != NULL)
-					pk_alpm_pkg_emit (job, pkg, PK_INFO_ENUM_BLOCKED); goto cont;
+				if (alpm_list_find_str (ignoregroups, i->data) != NULL) {
+					pk_alpm_pkg_emit (job, pkg, PK_INFO_ENUM_BLOCKED);
+					goto cont;
+				}
 			}
 		}
 
@@ -176,7 +179,7 @@ pk_backend_sync_thread (PkBackendJob* job, GVariant* params, gpointer p)
 	PkBackendAlpmPrivate *priv = pk_backend_get_user_data (backend);
 	PkBitfield flags;
 	gboolean only_trusted;
-	const alpm_list_t *i;
+	alpm_list_t *i;
 	alpm_list_t *asdeps = NULL, *asexplicit = NULL;
 	alpm_transflag_t alpm_flags = 0;
 	const gchar** package_ids;
@@ -188,11 +191,9 @@ pk_backend_sync_thread (PkBackendJob* job, GVariant* params, gpointer p)
 	if (!only_trusted && !pk_alpm_disable_signatures (backend, &error))
 		goto out;
 
-	if ((gboolean)p) {
+	if (p) {
 		i = alpm_get_syncdbs(priv->alpm);
-		for (; i != NULL; i = i->next) {
-			pk_alpm_update_database(job, TRUE, i->data, &error);
-		}
+		pk_alpm_refresh_databases (job, TRUE, i, &error);
 	}
 
 	/* download only */
@@ -200,7 +201,7 @@ pk_backend_sync_thread (PkBackendJob* job, GVariant* params, gpointer p)
 		alpm_flags |= ALPM_TRANS_FLAG_DOWNLOADONLY;
 
 	if (pk_alpm_transaction_initialize (job, alpm_flags, NULL, &error) &&
-	    pk_alpm_transaction_sync_targets (job, package_ids, (gboolean)p, &error) &&
+	    pk_alpm_transaction_sync_targets (job, package_ids, p ? TRUE : FALSE, &error) &&
 	    pk_alpm_transaction_simulate (job, &error)) {
 
 		if (pk_bitfield_contain (flags, PK_TRANSACTION_FLAG_ENUM_SIMULATE)) { /* simulation */
@@ -263,7 +264,7 @@ pk_backend_update_packages (PkBackend *self,
 			    PkBitfield transaction_flags,
 			    gchar **package_ids)
 {
-	pk_alpm_run (job, PK_STATUS_ENUM_SETUP, pk_backend_sync_thread, TRUE);
+	pk_alpm_run (job, PK_STATUS_ENUM_SETUP, pk_backend_sync_thread, (void *)TRUE);
 }
 
 void

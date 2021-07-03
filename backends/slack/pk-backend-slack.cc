@@ -44,7 +44,7 @@ void pk_backend_initialize(GKeyFile *conf, PkBackend *backend)
 
 	/* Read the configuration file */
 	key_conf = g_key_file_new();
-	path = g_build_filename(SYSCONFDIR, "PackageKit", "Slackware.conf", NULL);
+	path = g_build_filename(PK_SYSCONFDIR, "PackageKit", "Slackware.conf", NULL);
 	g_key_file_load_from_file(key_conf, path, G_KEY_FILE_NONE, &err);
 	if (err)
 	{

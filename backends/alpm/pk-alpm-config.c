@@ -40,7 +40,7 @@ static gchar *xfercmd = NULL;
 typedef struct
 {
 	 gboolean		 checkspace, color, disabledownloadtimeout, ilovecandy,
-				totaldl, usesyslog, verbosepkglists, is_check;
+				noprogressbar, totaldl, usesyslog, verbosepkglists, is_check;
 
 	 gchar			*arch, *cleanmethod, *dbpath, *gpgdir, *logfile,
 				*root, *xfercmd;
@@ -147,6 +147,14 @@ pk_alpm_config_set_ilovecandy (PkAlpmConfig *config)
 }
 
 static void
+pk_alpm_config_set_noprogressbar (PkAlpmConfig *config)
+{
+	g_return_if_fail (config != NULL);
+
+	config->noprogressbar = TRUE;
+}
+
+static void
 pk_alpm_config_set_totaldl (PkAlpmConfig *config)
 {
 	g_return_if_fail (config != NULL);
@@ -182,6 +190,7 @@ static const PkAlpmConfigBoolean pk_alpm_config_boolean_options[] = {
 	{ "Color", pk_alpm_config_set_color },
 	{ "DisableDownloadTimeout", pk_alpm_config_set_disabledownloadtimeout },
 	{ "ILoveCandy", pk_alpm_config_set_ilovecandy },
+	{ "NoProgressBar", pk_alpm_config_set_noprogressbar },
 	{ "TotalDownload", pk_alpm_config_set_totaldl },
 	{ "UseSyslog", pk_alpm_config_set_usesyslog },
 	{ "VerbosePkgLists", pk_alpm_config_set_verbosepkglists },
@@ -599,6 +608,11 @@ pk_alpm_config_parse (PkAlpmConfig *config, const gchar *filename,
 			continue;
 		}
 
+		if (g_strcmp0 (key, "ParallelDownloads") == 0 && str != NULL) {
+			/* Ignore "ParallelDownloads" key instead of crashing */
+			continue;
+		}
+
 		/* report errors from above */
 		g_set_error (&e, PK_ALPM_ERROR, PK_ALPM_ERR_CONFIG_INVALID,
 			     "unrecognised directive '%s'", key);
@@ -635,8 +649,10 @@ pk_alpm_config_initialize_alpm (PkAlpmConfig *config, GError **error)
 	}
 
 	if (config->is_check) {
+		gchar* path;
+
 		g_free(config->dbpath);
-		gchar* path = g_strconcat (config->root,
+		path = g_strconcat (config->root,
 						 "/var/lib/PackageKit/alpm" + dir,
 						 NULL);
 		g_mkdir_with_parents(path, 0755);
@@ -870,7 +886,7 @@ pk_alpm_spawn (const gchar *command)
 }
 
 static gint
-pk_alpm_fetchcb (const gchar *url, const gchar *path, gint force)
+pk_alpm_fetchcb (void *ctx, const gchar *url, const gchar *path, gint force)
 {
 	GRegex *xo, *xi;
 	gint result = 0;
@@ -942,6 +958,9 @@ pk_alpm_config_configure_alpm (PkBackend *backend, PkAlpmConfig *config, GError 
 {
 	PkBackendAlpmPrivate *priv = pk_backend_get_user_data (config->backend);
 	alpm_handle_t *handle;
+	gchar **arches;
+	gint i;
+	alpm_list_t *arches_list = NULL;
 
 	g_return_val_if_fail (config != NULL, FALSE);
 
@@ -951,7 +970,14 @@ pk_alpm_config_configure_alpm (PkBackend *backend, PkAlpmConfig *config, GError 
 
 	alpm_option_set_checkspace (handle, config->checkspace);
 	alpm_option_set_usesyslog (handle, config->usesyslog);
-	alpm_option_set_arch (handle, config->arch);
+
+	arches = g_strsplit (config->arch, ",", -1);
+	for (i = 0; arches[i]; i++) {
+		arches_list = alpm_list_add (arches_list, arches[i]);
+	}
+	alpm_option_set_architectures (handle, arches_list);
+	g_strfreev (arches);
+	alpm_list_free (arches_list);
 
 	/* backend takes ownership */
 	g_free (xfercmd);
@@ -959,9 +985,9 @@ pk_alpm_config_configure_alpm (PkBackend *backend, PkAlpmConfig *config, GError 
 	config->xfercmd = NULL;
 
 	if (xfercmd != NULL) {
-		alpm_option_set_fetchcb (handle, pk_alpm_fetchcb);
+		alpm_option_set_fetchcb (handle, pk_alpm_fetchcb, NULL);
 	} else {
-		alpm_option_set_fetchcb (handle, NULL);
+		alpm_option_set_fetchcb (handle, NULL, NULL);
 	}
 
 	/* backend takes ownership */
