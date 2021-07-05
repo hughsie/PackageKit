@@ -445,7 +445,7 @@ void AptIntf::emitPackageProgress(const pkgCache::VerIterator &ver, PkStatusEnum
     g_free(package_id);
 }
 
-void AptIntf::emitPackages(PkgList &output, PkBitfield filters, PkInfoEnum state)
+void AptIntf::emitPackages(PkgList &output, PkBitfield filters, PkInfoEnum state, bool multiversion)
 {
     // Sort so we can remove the duplicated entries
     output.sort();
@@ -459,7 +459,16 @@ void AptIntf::emitPackages(PkgList &output, PkBitfield filters, PkInfoEnum state
             break;
         }
 
-        for (auto ver = verIt; !ver.end(); ver++) {
+        auto ver = verIt;
+        // emit only the latest/chosen version if newest is requested
+        if (!multiversion || pk_bitfield_contain(filters, PK_FILTER_ENUM_NEWEST)) {
+            emitPackage(verIt, state);
+            continue;
+        } else if (pk_bitfield_contain(filters, PK_FILTER_ENUM_NOT_NEWEST) && !ver.end()) {
+            ver++;
+        }
+
+        for (; !ver.end(); ver++) {
             emitPackage(ver, state);
         }
     }
