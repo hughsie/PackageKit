@@ -1692,7 +1692,7 @@ PkgList AptIntf::checkChangedPackages(bool emitChanged)
             }
         } else if ((*m_cache)[pkg].Downgrade() == true) {
             // downgrading
-            const pkgCache::VerIterator &ver = m_cache->findVer(pkg);
+            const pkgCache::VerIterator &ver = m_cache->findCandidateVer(pkg);
             if (!ver.end()) {
                 ret.push_back(ver);
                 downgrading.push_back(ver);
